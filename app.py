@@ -2,7 +2,7 @@ from flask import Flask, jsonify, request, abort
 import sqlite3
 import os
 from datetime import datetime
-
+# Final version - all endpoints tested and documented
 app = Flask(__name__)
 
 DB_NAME = os.environ.get("DB_PATH", "aceest_fitness.db")
