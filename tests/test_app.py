@@ -14,10 +14,18 @@ from app import app, init_db  # noqa: E402
 
 @pytest.fixture(autouse=True)
 def fresh_db():
-    """Re-initialise the database before every test so each test is isolated."""
+    """Wipe and re-initialise the database before every test so each test is isolated."""
+    import sqlite3
+    conn = sqlite3.connect(os.environ.get("DB_PATH", "aceest_fitness.db"))
+    cur = conn.cursor()
+    # Drop all tables so every test starts with a clean slate
+    cur.execute("DROP TABLE IF EXISTS clients")
+    cur.execute("DROP TABLE IF EXISTS progress")
+    cur.execute("DROP TABLE IF EXISTS workouts")
+    conn.commit()
+    conn.close()
     init_db()
     yield
-    # Nothing to teardown – SQLite file is in /tmp and re-created each run.
 
 
 @pytest.fixture()
