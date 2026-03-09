@@ -5,6 +5,24 @@ import os
 app = Flask(__name__)
 DB_NAME = os.environ.get("DB_PATH", "aceest_fitness.db")
 
+PROGRAMS = {
+    "Fat Loss (FL)": {
+        "factor": 22,
+        "workout": "Mon: Back Squat 5x5\nTue: EMOM Assault Bike\nWed: Bench Press\nThu: Deadlift\nFri: Zone 2 Cardio",
+        "diet": "Breakfast: Egg Whites + Oats\nLunch: Grilled Chicken + Rice\nDinner: Fish Curry\nTarget: ~2000 kcal"
+    },
+    "Muscle Gain (MG)": {
+        "factor": 35,
+        "workout": "Mon: Squat 5x5\nTue: Bench 5x5\nWed: Deadlift 4x6\nThu: Front Squat\nFri: Incline Press\nSat: Barbell Rows",
+        "diet": "Breakfast: Eggs + Oats\nLunch: Chicken Biryani\nDinner: Mutton Curry\nTarget: ~3200 kcal"
+    },
+    "Beginner (BG)": {
+        "factor": 26,
+        "workout": "Full Body Circuit:\n- Air Squats\n- Ring Rows\n- Push-ups\nFocus: Technique",
+        "diet": "Balanced Meals\nIdli / Dosa / Rice + Dal\nProtein: 120g/day"
+    }
+}
+
 def get_db():
     conn = sqlite3.connect(DB_NAME)
     conn.row_factory = sqlite3.Row
@@ -32,6 +50,25 @@ def init_db():
 def health():
     return jsonify({"status": "ok", "service": "aceest-fitness"})
 
+@app.route("/programs", methods=["GET"])
+def list_programs():
+    result = {}
+    for name, data in PROGRAMS.items():
+        result[name] = {
+            "calorie_factor": data["factor"],
+            "workout_plan": data["workout"],
+            "diet_plan": data["diet"]
+        }
+    return jsonify(result)
+
+@app.route("/programs/<program_name>", methods=["GET"])
+def get_program(program_name):
+    if program_name not in PROGRAMS:
+        abort(404, description=f"Program '{program_name}' not found")
+    data = PROGRAMS[program_name]
+    return jsonify({"name": program_name, "calorie_factor": data["factor"],
+                    "workout_plan": data["workout"], "diet_plan": data["diet"]})
+
 @app.route("/clients", methods=["GET"])
 def list_clients():
     conn = get_db()
@@ -45,11 +82,16 @@ def create_client():
     name = (data.get("name") or "").strip()
     if not name:
         abort(400, description="Client name is required")
+    program = data.get("program", "")
+    weight = data.get("weight")
+    calories = None
+    if weight and program in PROGRAMS:
+        calories = int(float(weight) * PROGRAMS[program]["factor"])
     conn = get_db()
     try:
         conn.execute(
-            "INSERT INTO clients (name, age, height, weight, program) VALUES (?, ?, ?, ?, ?)",
-            (name, data.get("age"), data.get("height"), data.get("weight"), data.get("program"))
+            "INSERT INTO clients (name, age, height, weight, program, calories) VALUES (?, ?, ?, ?, ?, ?)",
+            (name, data.get("age"), data.get("height"), weight, program, calories)
         )
         conn.commit()
         row = conn.execute("SELECT * FROM clients WHERE name=?", (name,)).fetchone()
@@ -79,6 +121,18 @@ def delete_client(n):
     conn.commit()
     conn.close()
     return jsonify({"message": f"Client '{n}' deleted"})
+
+@app.route("/clients/<n>/calories", methods=["GET"])
+def calculate_calories(n):
+    conn = get_db()
+    row = conn.execute("SELECT weight, program FROM clients WHERE name=?", (n,)).fetchone()
+    conn.close()
+    if row is None:
+        abort(404, description=f"Client '{n}' not found")
+    if not row["weight"] or row["program"] not in PROGRAMS:
+        abort(400, description="Valid weight and program required")
+    calories = int(float(row["weight"]) * PROGRAMS[row["program"]]["factor"])
+    return jsonify({"client": n, "program": row["program"], "estimated_calories": calories})
 
 if __name__ == "__main__":
     init_db()
