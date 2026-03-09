@@ -1,5 +1,5 @@
 name: ACEest CI/CD Pipeline
-
+# Added docker build and smoke test stage
 on:
   push:
     branches: ["main", "dev"]
