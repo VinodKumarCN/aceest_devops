@@ -1,5 +1,5 @@
 name: ACEest CI/CD Pipeline
-# Added docker build and smoke test stage
+
 on:
   push:
     branches: ["main", "dev"]
@@ -7,9 +7,6 @@ on:
     branches: ["main"]
 
 jobs:
-  # -------------------------------------------------------
-  # Job 1: Lint & static checks
-  # -------------------------------------------------------
   lint:
     name: Lint
     runs-on: ubuntu-latest
@@ -27,14 +24,9 @@ jobs:
 
       - name: Run flake8
         run: |
-          # Stop the build if there are syntax errors or undefined names.
           flake8 app.py --count --select=E9,F63,F7,F82 --show-source --statistics
-          # Warn on style issues but do not fail the build.
           flake8 app.py --count --exit-zero --max-complexity=12 --max-line-length=100 --statistics
 
-  # -------------------------------------------------------
-  # Job 2: Unit tests (runs directly on the runner)
-  # -------------------------------------------------------
   test:
     name: Unit Tests
     runs-on: ubuntu-latest
@@ -52,14 +44,13 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run pytest
-       env:
-          PYTHONPATH: ${{ github.workspace }}
         run: |
-          pytest tests/test_app.py -v --tb=short
+          cd $GITHUB_WORKSPACE
+          python -m pytest tests/test_app.py -v --tb=short
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+          DB_PATH: /tmp/test_aceest.db
 
-  # -------------------------------------------------------
-  # Job 3: Build Docker image and run tests inside container
-  # -------------------------------------------------------
   docker:
     name: Docker Build & Test
     runs-on: ubuntu-latest
@@ -75,17 +66,17 @@ jobs:
         run: |
           docker run --rm \
             -e DB_PATH=/tmp/test_aceest.db \
+            -e PYTHONPATH=/app \
             aceest-fitness:${{ github.sha }} \
             python -m pytest tests/test_app.py -v --tb=short
 
-      - name: Verify app starts and /health responds
+      - name: Smoke test
         run: |
-          # Start the container in detached mode
           docker run -d --name aceest-smoke \
             -p 5000:5000 \
             -e DB_PATH=/tmp/smoke.db \
             aceest-fitness:${{ github.sha }}
-          # Wait up to 15s for the app to be ready
-          timeout 15 bash -c 'until curl -sf http://localhost:5000/health; do sleep 1; done'
+          sleep 5
+          curl -sf http://localhost:5000/health
           docker stop aceest-smoke
           docker rm aceest-smoke
